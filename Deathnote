@@ -1,178 +1,684 @@
--- // Services
+--[[
+
+       db                88                         88                88        88             88                         ad888888b,  
+      d88b               88                         ""                88        88             88                        d8"     "88  
+     d8'`8b              88                                           88        88             88                                a8P  
+    d8'  `8b     ,adPPYb,88  ,adPPYba,  8b,dPPYba,  88 8b,     ,d8    88aaaaaaaa88 88       88 88,dPPYba,     8b       d8     ,d8P"   
+   d8YaaaaY8b   a8"    `Y88 a8"     "8a 88P'   `"8a 88  `Y8, ,8P'     88""""""""88 88       88 88P'    "8a    `8b     d8'   a8P"      
+  d8""""""""8b  8b       88 8b       d8 88       88 88    )888(       88        88 88       88 88       d8     `8b   d8'  a8P'        
+ d8'        `8b "8a,   ,d88 "8a,   ,a8" 88       88 88  ,d8" "8b,     88        88 "8a,   ,a88 88b,   ,a8"      `8b,d8'  d8"          
+d8'          `8b `"8bbdP"Y8  `"YbbdP"'  88       88 88 8P'     `Y8    88        88  `"YbbdP'Y8 8Y"Ybbd8"'         "8"    88888888888  
+                                                                                                           
+]]--
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+if not Rayfield then
+    warn("Far Behind: Failed to load Rayfield UI library. The script will not run.")
+    return
+end
+
+-- Create the main window
+local Window = Rayfield:CreateWindow({
+    Name = "Far Behind",
+    LoadingTitle = "Far Behind Utilities",
+    LoadingSubtitle = "by ryuk",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "FarBehindUtilities",
+        FileName = "Config"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "discord.gg",
+        RememberJoins = true
+    },
+    KeySystem = false,
+    KeySettings = {
+        Title = "Far Behind V2 | DEATH NOTE",
+        Subtitle = "Key System",
+        Note = "Join the discord to get the key",
+        FileName = "Key",
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = {"Hello"}
+    }
+})
+
+-- Position window on the right side
+if Window and Window.Main then
+    Window.Main.Position = UDim2.new(1, -400, 0.5, -250)
+    Window.Main.Size = UDim2.new(0, 380, 0, 500)
+end
+
+-- Variables
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-
 local LocalPlayer = Players.LocalPlayer
+local NoclipConnection = nil
+local DetectionActive = false
+local KiraList = {}
+local TakaList = {}
+local LList = {}
+local Connections = {}
+local ESPEnabled = false
+local ESPHighlights = {}
+local ESPConnections = {} 
+local KiraESPEnabled = false
+local KiraESPHighlights = {}
+local KiraESPConnection = nil
 
--- // Main ScreenGui
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DeathNoteUtility"
-ScreenGui.Parent = CoreGui
-ScreenGui.ResetOnSpawn = false
+local ObjectESPEnabled = {
+    DeathNote = false,
+    IDs = false,
+    YourID = false
+}
+local ObjectESPHighlights = {}
+local ObjectESPConnections = {}
 
--- // Main Frame (Movable)
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 200)
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-MainFrame.BorderSizePixel = 0
-MainFrame.Parent = ScreenGui
+-- Game Variables
+local GameFolder = ReplicatedStorage:WaitForChild("Game", 10)
+local Gamemode = GameFolder and GameFolder:WaitForChild("Gamemode", 5)
+local Timer = GameFolder and GameFolder:WaitForChild("Timer", 5)
+local GamePhase = GameFolder and GameFolder:WaitForChild("GamePhase", 5)
 
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0, 8)
-UICorner.Parent = MainFrame
+-- // Top-Middle Small Text Notification System
+local NotifGui = Instance.new("ScreenGui")
+NotifGui.Name = "FarBehindTopNotifications"
+NotifGui.Parent = CoreGui
+NotifGui.ResetOnSpawn = false
 
--- // Top Bar / Logo (Minimizable click target)
-local TopBar = Instance.new("TextButton")
-TopBar.Name = "TopBar"
-TopBar.Size = UDim2.new(1, 0, 0, 35)
-TopBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-TopBar.Text = " [DN] Death Note Utility"
-TopBar.TextColor3 = Color3.fromRGB(240, 240, 240)
-TopBar.TextXAlignment = Enum.TextXAlignment.Left
-TopBar.Font = Enum.Font.Code
-TopBar.TextSize = 14
-TopBar.Parent = MainFrame
+local NotifLabel = Instance.new("TextLabel")
+NotifLabel.Name = "TopNotification"
+NotifLabel.Size = UDim2.new(0, 400, 0, 25)
+NotifLabel.Position = UDim2.new(0.5, -200, 0, 10)
+NotifLabel.BackgroundTransparency = 1
+NotifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+NotifLabel.TextStrokeTransparency = 0.5
+NotifLabel.Font = Enum.Font.Code
+NotifLabel.TextSize = 13
+NotifLabel.Text = ""
+NotifLabel.Visible = false
+NotifLabel.Parent = NotifGui
 
-local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 8)
-TopCorner.Parent = TopBar
-
--- // Content Container for Minimization
-local ContentContainer = Instance.new("Frame")
-ContentContainer.Name = "ContentContainer"
-ContentContainer.Size = UDim2.new(1, 0, 1, -35)
-ContentContainer.Position = UDim2.new(0, 0, 0, 35)
-ContentContainer.BackgroundTransparency = 1
-ContentContainer.Parent = MainFrame
-
--- // Status Text
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 50)
-StatusLabel.Position = UDim2.new(0, 10, 0, 10)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.Text = "Status: Scanning active...\nKira: Unknown"
-StatusLabel.Font = Enum.Font.Code
-StatusLabel.TextSize = 13
-StatusLabel.TextWrapped = true
-StatusLabel.Parent = ContentContainer
-
--- // Minimization Logic
-local minimized = false
-TopBar.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    ContentContainer.Visible = not minimized
-    MainFrame.Size = minimized and UDim2.new(0, 300, 0, 35) or UDim2.new(0, 300, 0, 200)
-end)
-
--- // Draggable Logic
-local dragging, dragInput, dragStart, startPos
-TopBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
--- // ESP & Role Detection System
-local espCache = {}
-
-local function createESP(player)
-    if player == LocalPlayer then return end
-    
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "DN_ESP"
-    highlight.FillTransparency = 0.5
-    highlight.OutlineTransparency = 0
-    highlight.Parent = CoreGui
-    
-    espCache[player] = highlight
-end
-
-local function removeESP(player)
-    if espCache[player] then
-        espCache[player]:Destroy()
-        espCache[player] = nil
-    end
-end
-
-for _, player in ipairs(Players:GetPlayers()) do
-    createESP(player)
-end
-Players.PlayerAdded:Connect(createESP)
-Players.PlayerRemoving:Connect(removeESP)
-
--- // Notification System
-local function sendNotification(msg)
-    local notif = Instance.new("TextLabel")
-    notif.Size = UDim2.new(0, 250, 0, 35)
-    notif.Position = UDim2.new(1, -260, 1, -50)
-    notif.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    notif.TextColor3 = Color3.fromRGB(255, 60, 60)
-    notif.Font = Enum.Font.Code
-    notif.TextSize = 12
-    notif.Text = msg
-    notif.Parent = ScreenGui
-    
-    task.delay(3, function()
-        notif:Destroy()
+local function showTopNotification(text)
+    NotifLabel.Text = text
+    NotifLabel.Visible = true
+    task.delay(4, function()
+        if NotifLabel.Text == text then
+            NotifLabel.Visible = false
+        end
     end)
 end
 
--- // Main Loop for Role Checking & ESP Updating
-RunService.RenderStepped:Connect(function()
-    local detectedKira = "None"
+-- Helper function to truncate text
+local function truncateText(text, maxLength)
+    if #text <= maxLength then
+        return text
+    else
+        return string.sub(text, 1, maxLength - 3) .. "..."
+    end
+end
+
+-- Helper function to format player name compactly
+local function formatPlayerName(player)
+    local displayName = truncateText(player.DisplayName, 12)
+    local name = truncateText(player.Name, 10)
+    return displayName .. " (" .. name .. ")"
+end
+
+local function FetchCurrentId(Map, SpecifiedClient)
+    if not Map then return nil end
+    for _, v in Map:GetChildren() do
+        if v.Name == "Id" then
+            if v:FindFirstChild("SurfaceGui") and v.SurfaceGui:FindFirstChild("Frame") and v.SurfaceGui.Frame:FindFirstChild("PlayerName") then
+                local playerName = v.SurfaceGui.Frame.PlayerName.Text
+                if (playerName == SpecifiedClient.Name or playerName == SpecifiedClient.DisplayName) and v.SurfaceGui.Enabled then
+                    return v
+                end
+            end
+            for _, child in pairs(v:GetChildren()) do
+                if child:IsA("BillboardGui") or child:IsA("SurfaceGui") then
+                    for _, subChild in pairs(child:GetDescendants()) do
+                        if subChild:IsA("TextLabel") and subChild.Text then
+                            local text = subChild.Text
+                            if (text == SpecifiedClient.Name or text == SpecifiedClient.DisplayName) then
+                                return v
+                            end
+                        end
+                    end
+                end
+            end
+            if v:FindFirstChild("IdPrompt") then
+                local closestPlayer = nil
+                local closestDistance = math.huge
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        local distance = (player.Character.HumanoidRootPart.Position - v.Position).Magnitude
+                        if distance < closestDistance then
+                            closestDistance = distance
+                            closestPlayer = player
+                        end
+                    end
+                end
+                
+                if closestPlayer == SpecifiedClient and closestDistance < 10 then
+                    return v
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function closestPlayerAtPos(Position)
+    local MaxRange = math.huge;
+    local Closest = nil;
+    for _, v in Players:GetPlayers() do
+        local RootPart = v.Character and v.Character:FindFirstChild("HumanoidRootPart");
+        if RootPart then
+            local Magnitude = (RootPart.Position - Position).Magnitude;
+            if Magnitude < MaxRange then
+                Closest = v.Character;
+                MaxRange = Magnitude;
+            end
+        end
+    end
+    return Closest;
+end
+
+local function FodderClipManagement(Bool, DelayTime)
+    if not LocalPlayer.Character then return end
+    for i, v in pairs(LocalPlayer.Character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = not Bool
+        end
+    end
+    if DelayTime then
+        task.delay(DelayTime, function()
+            FodderClipManagement(not Bool)
+        end)
+    end
+end
+
+local function CheckForDnOnEachCurrentPlayer()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if (plr.Character) then
+            local co1 = plr.Character.ChildAdded:Connect(function(child)
+                if child.Name == "DeathNoteBook" then
+                    if not table.find(KiraList, plr) then
+                        table.insert(KiraList, plr)
+                    end
+                end
+            end)
+            table.insert(Connections, co1)
+        end
+    end
+end
+
+local function CheckForIdsTaken(CMap)
+    if not CMap then return end
+    for _, v in CMap:GetChildren() do
+        if v.Name == "Id" then
+            local Position = v.Position;
+            local SurfaceGui = v:FindFirstChild("SurfaceGui");
+            if SurfaceGui then
+                local co2 = SurfaceGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+                    local Kira = closestPlayerAtPos(Position);
+                    if Kira and Timer and Timer.Value < 178.5 and GamePhase and GamePhase.Value == "IdScatter" then
+                        local KiraPlr = Players:GetPlayerFromCharacter(Kira)
+                        if KiraPlr and not table.find(TakaList, KiraPlr) then
+                            table.insert(TakaList, KiraPlr)
+                            showTopNotification("[ID STOLEN] " .. KiraPlr.Name .. " picked up an ID!")
+                        end
+                    end
+                end)
+                table.insert(Connections, co2)
+            end
+        end
+    end
+end
+
+local function GetMisaNames()
+    local MNameAndUsernameList = {}
+    if GameFolder and GameFolder:FindFirstChild("FolderForNames") then
+        for _, name in pairs(GameFolder.FolderForNames:GetChildren()) do
+            if name.Value ~= nil then
+                MNameAndUsernameList[tostring(name.Value)] = name.Name
+            end
+        end
+    end
+    return MNameAndUsernameList
+end
+
+local function MatchNameToPlayer(name)
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr.Name == name or plr.DisplayName == name then
+            return plr
+        end
+    end
+end
+
+local function GetPersonWithMostVotesAlgorithm()
+    if not GameFolder or not GameFolder:FindFirstChild("VoteoutFolder") then return nil, 0 end
+    local maxvalue, mostvoteplr = 0, nil
+    for _, plrvotes in pairs(GameFolder.VoteoutFolder:GetChildren()) do
+        if plrvotes.Value > maxvalue then
+            maxvalue = plrvotes.Value
+            mostvoteplr = plrvotes.Name
+        end
+    end
+    return MatchNameToPlayer(mostvoteplr), maxvalue
+end
+
+local function TryAndFetchL()
+    local HighestLChance, Goodlist = 0, {}
+    LList = {}
+    local playerLChances = {}
     
-    for player, highlight in pairs(espCache) do
-        local character = player.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            highlight.Adornee = character
-            
-            -- Check for Death Note or Kira indicators in backpack/character
-            local isKira = false
-            local backpack = player:FindFirstChild("Backpack")
-            
-            if character:FindFirstChild("Death Note") or (backpack and backpack:FindFirstChild("Death Note")) then
-                isKira = true
-                detectedKira = player.Name
-            end
-            
-            if isKira then
-                highlight.FillColor = Color3.fromRGB(255, 50, 50)
-                highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+    for _, plr in pairs(Players:GetPlayers()) do
+        if not table.find(KiraList, plr) and not table.find(TakaList, plr) then
+            local Lchance = nil
+            if plr:FindFirstChild("LChance_Weight") then
+                Lchance = plr.LChance_Weight
             else
-                highlight.FillColor = Color3.fromRGB(120, 120, 120)
-                highlight.OutlineColor = Color3.fromRGB(80, 80, 80)
+                for _, child in pairs(plr:GetChildren()) do
+                    if child:IsA("Folder") or child:IsA("Model") then
+                        if child:FindFirstChild("LChance_Weight") then
+                            Lchance = child.LChance_Weight
+                            break
+                        elseif child:FindFirstChild("LChance") then
+                            Lchance = child.LChance
+                            break
+                        end
+                    end
+                end
             end
-        else
-            highlight.Adornee = nil
+            if Lchance and Lchance.Value then
+                table.insert(playerLChances, { Player = plr, Value = Lchance.Value })
+            end
         end
     end
     
-    StatusLabel.Text = string.format("Status: Active\nCurrent Kira: %s", detectedKira)
-end)
+    table.sort(playerLChances, function(a, b) return a.Value > b.Value end)
+    if #playerLChances > 0 then
+        HighestLChance = playerLChances[1].Value
+        for _, data in pairs(playerLChances) do
+            if data.Value == HighestLChance then
+                table.insert(Goodlist, data.Player)
+            else
+                break 
+            end
+        end
+    end
+    LList = Goodlist
+    return Goodlist
+end
 
--- // Monitor Tool pickups / ID drops in workspace
-workspace.ChildAdded:Connect(function(child)
-    if child.Name:lower():find("id") or child.Name:lower():find("note") then
-        sendNotification("[!] Item spawned/picked up: " .. child.Name)
+local function KeepSearchingForL()
+    while DetectionActive do
+        task.wait(2)
+        if DetectionActive then
+            local glist = TryAndFetchL()
+            if #glist > 0 then
+                local text = ""
+                for i, item in pairs(glist) do
+                    if i == 1 then
+                        text = formatPlayerName(item)
+                    else
+                        text = text .. " | " .. formatPlayerName(item)
+                    end
+                end
+                LLabel:Set("L (" .. #glist .. "): " .. text)
+            else
+                LLabel:Set("L (0): None")
+            end
+        end
+    end
+end
+
+local function AutoSearch(StashList)
+    if workspace.Map ~= nil and GamePhase and GamePhase.Value == "Search" then
+        for _, crate in pairs(StashList) do
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = crate.CFrame * CFrame.new(Vector3.new(0,1,0))
+                keypress(0x45)
+                task.wait(0.2)
+                keyrelease(0x45)
+                if GamePhase.Value ~= "Search" then
+                    break
+                end
+            end
+        end
+    end
+end
+
+local function FillStashList()
+    local StashList = {}
+    if workspace.Map then
+        for _, v in workspace.Map:GetChildren() do
+            if v.Name == "Crate" then
+                table.insert(StashList, v)
+            end
+        end
+    end
+    return StashList
+end
+
+local function clearObjectESP()
+    for _, conn in pairs(ObjectESPConnections) do
+        if conn and conn.Disconnect then conn:Disconnect() end
+    end
+    ObjectESPConnections = {}
+
+    for _, highlight in pairs(ObjectESPHighlights) do
+        if highlight and highlight.Destroy then highlight:Destroy() end
+    end
+    ObjectESPHighlights = {}
+end
+
+local function highlightSingleId(id)
+    if not (ObjectESPEnabled.IDs or ObjectESPEnabled.YourID) then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Parent = id
+    table.insert(ObjectESPHighlights, highlight)
+
+    local map = workspace:FindFirstChild("Map")
+    local isMyID = ObjectESPEnabled.YourID and map and FetchCurrentId(map, LocalPlayer) == id
+    local isClaimed = false
+
+    if not isMyID and map then
+        for _, player in pairs(Players:GetPlayers()) do
+            if FetchCurrentId(map, player) == id then
+                isClaimed = true
+                break
+            end
+        end
+    end
+
+    if isMyID then
+        highlight.FillColor = Color3.new(0, 1, 0.2)
+        highlight.OutlineColor = Color3.new(0, 0.5, 0.1)
+    elseif ObjectESPEnabled.IDs then
+        if isClaimed then
+            highlight.FillColor = Color3.new(0.5, 0.5, 0.5) -- Grey for claimed/innocent
+            highlight.OutlineColor = Color3.new(0.2, 0.2, 0.2)
+        else
+            highlight.FillColor = Color3.new(1, 1, 0) -- Yellow for unclaimed
+            highlight.OutlineColor = Color3.new(0.5, 0.5, 0)
+        end
+    else
+        highlight:Destroy()
+    end
+end
+
+local function setupObjectESP()
+    clearObjectESP()
+
+    if ObjectESPEnabled.DeathNote then
+        local conn = workspace.DescendantAdded:Connect(function(descendant)
+            if descendant.Name == "DeathNoteBook" then
+                local highlight = Instance.new("Highlight")
+                highlight.FillColor = Color3.new(0.5, 0, 0.7)
+                highlight.OutlineColor = Color3.new(0.2, 0, 0.3)
+                highlight.Parent = descendant
+                table.insert(ObjectESPHighlights, highlight)
+            end
+        end)
+        table.insert(ObjectESPConnections, conn)
+    end
+
+    if ObjectESPEnabled.IDs or ObjectESPEnabled.YourID then
+        local idAddedConn = workspace.DescendantAdded:Connect(function(descendant)
+            if descendant.Name == "Id" and descendant:IsDescendantOf(workspace:FindFirstChild("Map") or workspace) then
+                highlightSingleId(descendant)
+            end
+        end)
+        table.insert(ObjectESPConnections, idAddedConn)
+
+        local map = workspace:FindFirstChild("Map")
+        if map then
+            for _, id in pairs(map:GetChildren()) do
+                if id.Name == "Id" then
+                    highlightSingleId(id)
+                end
+            end
+        end
+    end
+end
+
+local function toggleKiraESP()
+    if KiraESPEnabled then
+        KiraESPEnabled = false
+        for _, highlight in pairs(KiraESPHighlights) do
+            if highlight and highlight.Destroy then highlight:Destroy() end
+        end
+        KiraESPHighlights = {}
+        if KiraESPConnection then
+            KiraESPConnection:Disconnect()
+            KiraESPConnection = nil
+        end
+    else
+        KiraESPEnabled = true
+        local function highlightKiraPlayers()
+            for _, highlight in pairs(KiraESPHighlights) do
+                if highlight and highlight.Destroy then highlight:Destroy() end
+            end
+            KiraESPHighlights = {}
+            for _, player in pairs(KiraList) do
+                if player.Character then
+                    local highlight = Instance.new("Highlight")
+                    highlight.FillColor = Color3.new(1, 0, 0)
+                    highlight.OutlineColor = Color3.new(0.5, 0, 0)
+                    highlight.Parent = player.Character
+                    table.insert(KiraESPHighlights, highlight)
+                end
+            end
+        end
+        highlightKiraPlayers()
+        KiraESPConnection = RunService.Heartbeat:Connect(function()
+            if KiraESPEnabled then highlightKiraPlayers() end
+        end)
+    end
+end
+
+-- Create Main Tab
+local MainTab = Window:CreateTab("Main")
+
+local DetectionSection = MainTab:CreateSection("Detection")
+local StatusLabel = MainTab:CreateLabel("Status: Ready", false)
+local KiraLabel = MainTab:CreateLabel("Kira (0): None", false)
+local IDLabel = MainTab:CreateLabel("ID (0): None", false)
+local LLabel = MainTab:CreateLabel("L (0): None", false)
+
+MainTab:CreateButton({
+    Name = "Start Detection",
+    Callback = function()
+        if workspace:FindFirstChild("Map") then
+            DetectionActive = true
+            StatusLabel:Set("Status: Active")
+            KiraLabel:Set("Kira (0): Scanning...")
+            IDLabel:Set("ID (0): Scanning...")
+            LLabel:Set("L (0): Scanning...")
+            
+            Rayfield:Notify({ Title = "Detection Started", Content = "Kira detection has been activated", Duration = 3 })
+            
+            CheckForIdsTaken(workspace.Map)
+            CheckForDnOnEachCurrentPlayer()
+            task.spawn(KeepSearchingForL)
+            
+            task.spawn(function()
+                while DetectionActive do
+                    task.wait(1)
+                    if DetectionActive then
+                        if #KiraList > 0 then
+                            local text = ""
+                            for i, item in pairs(KiraList) do
+                                text = (i == 1) and formatPlayerName(item) or (text .. " | " .. formatPlayerName(item))
+                            end
+                            KiraLabel:Set("Kira (" .. #KiraList .. "): " .. text)
+                        else
+                            KiraLabel:Set("Kira (0): None")
+                        end
+                        
+                        if #TakaList > 0 then
+                            local text = ""
+                            for i, item in pairs(TakaList) do
+                                text = (i == 1) and formatPlayerName(item) or (text .. " | " .. formatPlayerName(item))
+                            end
+                            IDLabel:Set("ID (" .. #TakaList .. "): " .. text)
+                        else
+                            IDLabel:Set("ID (0): None")
+                        end
+                    end
+                end
+            end)
+        else
+            Rayfield:Notify({ Title = "Error", Content = "Map not found - wait for game to start", Duration = 3 })
+        end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Clear All",
+    Callback = function()
+        DetectionActive = false
+        KiraList = {}
+        TakaList = {}
+        LList = {}
+        for _, con in pairs(Connections) do
+            if con and con.Disconnect then con:Disconnect() end
+        end
+        Connections = {}
+        StatusLabel:Set("Status: Ready")
+        KiraLabel:Set("Kira (0): None")
+        IDLabel:Set("ID (0): None")
+        LLabel:Set("L (0): None")
+        Rayfield:Notify({ Title = "Cleared", Content = "All detection data cleared", Duration = 2 })
+    end
+})
+
+local StatsSection = MainTab:CreateSection("Statistics")
+local StatsLabel = MainTab:CreateLabel("K:0/4 | ID:0 | L:0", false)
+task.spawn(function()
+    while true do
+        task.wait(2)
+        StatsLabel:Set("K:" .. #KiraList .. "/4 | ID:" .. #TakaList .. " | L:" .. #LList)
     end
 end)
 
+local TeleportSection = MainTab:CreateSection("Teleportation")
+MainTab:CreateButton({
+    Name = "TP To Your ID",
+    Callback = function()
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+        local map = workspace:FindFirstChild("Map")
+        if not map then return end
+        local CurrentUserId = FetchCurrentId(map, LocalPlayer)
+        if CurrentUserId then
+            FodderClipManagement(true, 2)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CurrentUserId.CFrame * CFrame.new(0, 3, 0)
+            Rayfield:Notify({ Title = "Teleported", Content = "Teleported to your ID", Duration = 2 })
+        end
+    end
+})
+
+local UtilitySection = MainTab:CreateSection("Utilities")
+MainTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            NoclipConnection = RunService.Stepped:Connect(function()
+                if LocalPlayer.Character then
+                    for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
+            end)
+        else
+            if NoclipConnection then NoclipConnection:Disconnect() NoclipConnection = nil end
+        end
+    end
+})
+
+local ObjectESPSection = MainTab:CreateSection("Object ESP")
+MainTab:CreateToggle({
+    Name = "DeathNote ESP",
+    CurrentValue = false,
+    Callback = function(Value)
+        ObjectESPEnabled.DeathNote = Value
+        setupObjectESP()
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "IDs ESP",
+    CurrentValue = false,
+    Callback = function(Value)
+        ObjectESPEnabled.IDs = Value
+        setupObjectESP()
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Your ID ESP",
+    CurrentValue = false,
+    Callback = function(Value)
+        ObjectESPEnabled.YourID = Value
+        setupObjectESP()
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Kira ESP",
+    CurrentValue = false,
+    Callback = function(Value)
+        toggleKiraESP()
+    end
+})
+
+-- Create Settings Tab
+local SettingsTab = Window:CreateTab("Settings")
+SettingsTab:CreateKeybind({
+    Name = "Toggle UI",
+    CurrentKeybind = "K",
+    HoldToInteract = false,
+    KeybindCallback = function(Keybind)
+        if Window and Window.ToggleUI then Window:ToggleUI() end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Fiddle IDs",
+    Callback = function()
+        local map = workspace:FindFirstChild("Map")
+        if map then
+            for _, id in pairs(map:GetChildren()) do
+                if id.Name == "Id" and id:FindFirstChild("IdPrompt") then
+                    id.IdPrompt.HoldDuration = 0
+                    id.IdPrompt.MaxActivationDistance = 100000
+                    id.IdPrompt.RequiresLineOfSight = false
+                end
+            end
+            Rayfield:Notify({ Title = "ID Prompts Modified", Content = "Instant pickup enabled", Duration = 2 })
+        end
+    end
+})
+
+-- Create Info Tab
+local InfoTab = Window:CreateTab("Info")
+InfoTab:CreateSection("Kira & ID Tracking Active")
+InfoTab:CreateLabel("Top-middle notification will alert when IDs are taken.", false)
+
+Rayfield:Notify({
+    Title = "Far Behind",
+    Content = "Press K to Toggle MENU.",
+    Duration = 10
+})
+
+print("[Far Behind] Loaded successfully.")
