@@ -8,8 +8,8 @@
     ║   ██║     ██║  ██║██║  ██║███████╗    ╚███╔███╔╝███████╗    ║
     ║   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝     ╚══╝╚══╝ ╚══════╝    ║
     ║                                                              ║
-    ║   Death Note Script - Rayfield Edition                        ║
-    ║   Features: ID Notifications, ESP, Detection, Fishing        ║
+    ║   Fare well - Death Note Script                               ║
+    ║   Using Rayfield GUI with built-in config saving             ║
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
 --]]
@@ -19,36 +19,15 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
--- Game Detection
+-- Game References
 local GameFolder = ReplicatedStorage:WaitForChild("Game", 10)
 local Gamemode = GameFolder and GameFolder:WaitForChild("Gamemode", 5)
 local GamePhase = GameFolder and GameFolder:WaitForChild("GamePhase", 5)
 
--- Config
-local Config = {
-    -- ESP
-    PlayerESP = false,
-    KiraESP = false,
-    DeathNoteESP = false,
-    IDsESP = false,
-    YourIDESP = false,
-    -- Features
-    Noclip = false,
-    AutoSearch = false,
-    Notifications = true,
-    -- Fishing
-    AutoFish = false,
-    AutoShinigamis = false,
-    AutoTitles = false,
-    -- Settings
-    Keybind = Enum.KeyCode.K
-}
-
--- State
+-- State Variables
 local DetectionActive = false
 local KiraList = {}
 local TakaList = {}
@@ -56,50 +35,25 @@ local LList = {}
 local Connections = {}
 local ESPHighlights = {}
 local NoclipConnection = nil
-local FishingConnections = {}
+local FishingLoops = {}
 
--- Config System
-local ConfigFolder = "FareWell_Config"
-local ConfigFile = ConfigFolder .. "/DeathNote_Config.json"
+-- Remote Events (for fishing)
+local SpinSystem = nil
+local MinigameEvent = nil
 
-local function SaveConfig()
-    pcall(function()
-        if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
-        local data = {}
-        for k, v in pairs(Config) do
-            if typeof(v) == "EnumItem" then
-                data[k] = tostring(v)
-            else
-                data[k] = v
-            end
-        end
-        writefile(ConfigFile, HttpService:JSONEncode(data))
-    end)
-end
-
-local function LoadConfig()
-    pcall(function()
-        if isfile(ConfigFile) then
-            local data = HttpService:JSONDecode(readfile(ConfigFile))
-            for k, v in pairs(data) do
-                if k == "Keybind" then
-                    Config[k] = Enum.KeyCode[v:gsub("Enum.KeyCode.", "")]
-                else
-                    Config[k] = v
-                end
-            end
-        end
-    end)
-end
+-- Initialize Remote Events
+pcall(function()
+    SpinSystem = ReplicatedStorage.Game.Remotes.SpinSystem
+    MinigameEvent = ReplicatedStorage.Game.Remotes.MinigameEvent
+end)
 
 -- ==================== NOTIFICATION SYSTEM ====================
 
 local function Notify(title, message, duration)
-    if not Config.Notifications then return end
     duration = duration or 3
-    
     local notifGui = Instance.new("ScreenGui")
     notifGui.Name = "FareWell_Notif"
+    notifGui.ResetOnSpawn = false
     notifGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     notifGui.DisplayOrder = 100
     
@@ -141,14 +95,12 @@ local function Notify(title, message, duration)
     msgLabel.TextXAlignment = Enum.TextXAlignment.Left
     msgLabel.Parent = frame
     
-    -- Animate in
     TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
         Position = UDim2.new(0.5, -175, 0, 80)
     }):Play()
     
-    -- Remove
     task.delay(duration, function()
-        local out = TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Quart), {
+        local out = TweenService:Create(frame, TweenInfo.new(0.4), {
             Position = UDim2.new(0.5, -175, 0, -60)
         })
         out:Play()
@@ -161,6 +113,7 @@ end
 local function ShowIDPickupNotification(pickerName, idOwnerName)
     local notifGui = Instance.new("ScreenGui")
     notifGui.Name = "ID_Pickup_Notif"
+    notifGui.ResetOnSpawn = false
     notifGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     notifGui.DisplayOrder = 101
     
@@ -180,13 +133,6 @@ local function ShowIDPickupNotification(pickerName, idOwnerName)
     stroke.Thickness = 3
     stroke.Parent = container
     
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 30, 60)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 25, 30))
-    })
-    gradient.Parent = container
-    
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, -20, 1, -10)
     textLabel.Position = UDim2.new(0, 10, 0, 5)
@@ -198,7 +144,6 @@ local function ShowIDPickupNotification(pickerName, idOwnerName)
     textLabel.RichText = true
     textLabel.Parent = container
     
-    -- Pulse effect
     task.spawn(function()
         for i = 1, 4 do
             stroke.Color = Color3.fromRGB(200, 150, 255)
@@ -208,14 +153,12 @@ local function ShowIDPickupNotification(pickerName, idOwnerName)
         end
     end)
     
-    -- Animate in
     TweenService:Create(container, TweenInfo.new(0.6, Enum.EasingStyle.Back), {
         Position = UDim2.new(0.5, -210, 0, 100)
     }):Play()
     
-    -- Remove after 4 seconds
     task.delay(4, function()
-        local out = TweenService:Create(container, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {
+        local out = TweenService:Create(container, TweenInfo.new(0.5), {
             Position = UDim2.new(0.5, -210, 0, -60)
         })
         out:Play()
@@ -228,7 +171,7 @@ end
 
 local function ClearESP()
     for _, hl in pairs(ESPHighlights) do
-        if hl and hl.Parent then hl:Destroy() end
+        if hl and hl.Parent then pcall(function() hl:Destroy() end) end
     end
     ESPHighlights = {}
 end
@@ -245,10 +188,10 @@ local function CreateHighlight(obj, color, outline)
     return hl
 end
 
-local function UpdateESP()
+local function UpdateESP(playerESP, kiraESP, dnESP, idsESP, yourIDESP)
     ClearESP()
     
-    if Config.PlayerESP then
+    if playerESP then
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
                 CreateHighlight(plr.Character, Color3.fromRGB(100, 150, 255))
@@ -256,7 +199,7 @@ local function UpdateESP()
         end
     end
     
-    if Config.KiraESP then
+    if kiraESP then
         for _, kira in pairs(KiraList) do
             if kira.Character then
                 CreateHighlight(kira.Character, Color3.fromRGB(255, 50, 50), Color3.fromRGB(150, 0, 0))
@@ -264,33 +207,30 @@ local function UpdateESP()
         end
     end
     
-    -- Object ESP
-    if Config.DeathNoteESP or Config.IDsESP or Config.YourIDESP then
+    if dnESP or idsESP or yourIDESP then
         local map = workspace:FindFirstChild("Map")
         if map then
             for _, obj in pairs(map:GetDescendants()) do
-                if obj:IsA("Model") or obj:IsA("Part") then
-                    if Config.DeathNoteESP and obj.Name:find("DeathNote") then
-                        CreateHighlight(obj, Color3.fromRGB(150, 0, 200))
-                    elseif Config.IDsESP and obj.Name == "Id" then
-                        local isMine = false
-                        if Config.YourIDESP then
-                            local sg = obj:FindFirstChild("SurfaceGui")
-                            if sg then
-                                local frame = sg:FindFirstChild("Frame")
-                                if frame then
-                                    local nameLabel = frame:FindFirstChild("PlayerName")
-                                    if nameLabel and (nameLabel.Text == LocalPlayer.Name or nameLabel.Text == LocalPlayer.DisplayName) then
-                                        isMine = true
-                                    end
+                if dnESP and obj.Name:find("DeathNote") then
+                    CreateHighlight(obj, Color3.fromRGB(150, 0, 200))
+                elseif (idsESP or yourIDESP) and obj.Name == "Id" then
+                    local isMine = false
+                    if yourIDESP then
+                        local sg = obj:FindFirstChild("SurfaceGui")
+                        if sg then
+                            local frame = sg:FindFirstChild("Frame")
+                            if frame then
+                                local nl = frame:FindFirstChild("PlayerName")
+                                if nl and (nl.Text == LocalPlayer.Name or nl.Text == LocalPlayer.DisplayName) then
+                                    isMine = true
                                 end
                             end
                         end
-                        if isMine then
-                            CreateHighlight(obj, Color3.fromRGB(0, 255, 100))
-                        else
-                            CreateHighlight(obj, Color3.fromRGB(255, 255, 0))
-                        end
+                    end
+                    if isMine then
+                        CreateHighlight(obj, Color3.fromRGB(0, 255, 100))
+                    elseif idsESP then
+                        CreateHighlight(obj, Color3.fromRGB(255, 255, 0))
                     end
                 end
             end
@@ -332,7 +272,6 @@ local function CheckIDPickups(map)
             if sg then
                 local con = sg:GetPropertyChangedSignal("Enabled"):Connect(function()
                     if not sg.Enabled then
-                        -- ID picked up
                         local owner = nil
                         local frame = sg:FindFirstChild("Frame")
                         if frame then
@@ -417,64 +356,62 @@ end
 
 -- ==================== FISHING SYSTEM ====================
 
-local function StartFishing()
-    local SpinSystem = ReplicatedStorage:WaitForChild("Game"):WaitForChild("Remotes"):WaitForChild("SpinSystem")
-    local MinigameEvent = ReplicatedStorage:WaitForChild("Game"):WaitForChild("Remotes"):WaitForChild("MinigameEvent")
-    
-    -- Auto Fish
-    if Config.AutoFish then
-        local fishCon = task.spawn(function()
-            while Config.AutoFish do
-                pcall(function()
-                    MinigameEvent:FireServer({Status = "CaughtFish"})
-                end)
-                task.wait(0.2)
-            end
-        end)
-        table.insert(FishingConnections, fishCon)
-    end
-    
-    -- Auto Shinigamis
-    if Config.AutoShinigamis then
-        local shiniCon = task.spawn(function()
-            while Config.AutoShinigamis do
-                pcall(function()
-                    SpinSystem:FireServer({Category = "Shinigamis"})
-                end)
-                task.wait(0.2)
-            end
-        end)
-        table.insert(FishingConnections, shiniCon)
-    end
-    
-    -- Auto Titles
-    if Config.AutoTitles then
-        local titleCon = task.spawn(function()
-            while Config.AutoTitles do
-                pcall(function()
-                    SpinSystem:FireServer({Category = "Titles"})
-                end)
-                task.wait(0.2)
-            end
-        end)
-        table.insert(FishingConnections, titleCon)
+local function StopFishing()
+    for name, loop in pairs(FishingLoops) do
+        if loop then
+            pcall(function() task.cancel(loop) end)
+        end
+        FishingLoops[name] = nil
     end
 end
 
-local function StopFishing()
-    for _, con in pairs(FishingConnections) do
-        if type(con) == "thread" then
-            pcall(function() task.cancel(con) end)
+local function StartAutoFish()
+    if FishingLoops["Fish"] then return end
+    FishingLoops["Fish"] = task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                if MinigameEvent then
+                    MinigameEvent:FireServer({Status = "CaughtFish"})
+                end
+            end)
         end
-    end
-    FishingConnections = {}
+    end)
+end
+
+local function StartAutoShinigamis()
+    if FishingLoops["Shinigamis"] then return end
+    FishingLoops["Shinigamis"] = task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                if SpinSystem then
+                    SpinSystem:FireServer({Category = "Shinigamis"})
+                end
+            end)
+        end
+    end)
+end
+
+local function StartAutoTitles()
+    if FishingLoops["Titles"] then return end
+    FishingLoops["Titles"] = task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                if SpinSystem then
+                    SpinSystem:FireServer({Category = "Titles"})
+                end
+            end)
+        end
+    end)
 end
 
 -- ==================== UTILITY FUNCTIONS ====================
 
 local function TeleportToYourID()
     local map = workspace:FindFirstChild("Map")
-    if not map then return end
+    if not map then
+        Notify("Error", "Map not found", 2)
+        return
+    end
     
     for _, id in pairs(map:GetChildren()) do
         if id.Name == "Id" then
@@ -498,17 +435,10 @@ local function TeleportToYourID()
     -- Find unclaimed
     for _, id in pairs(map:GetChildren()) do
         if id.Name == "Id" then
-            local claimed = false
-            for _, plr in pairs(Players:GetPlayers()) do
-                local theirId = nil -- Would need to check
-                if theirId == id then claimed = true break end
-            end
-            if not claimed then
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = id.CFrame * CFrame.new(0, 3, 0)
-                    Notify("Teleported", "Moved to unclaimed ID", 2)
-                    return
-                end
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = id.CFrame * CFrame.new(0, 3, 0)
+                Notify("Teleported", "Moved to unclaimed ID", 2)
+                return
             end
         end
     end
@@ -583,350 +513,390 @@ local function ToggleNoclip(enabled)
     end
 end
 
--- ==================== RAYFIELD GUI ====================
+-- ==================== LOAD RAYFIELD ====================
 
-local function LoadRayfield()
-    local success, Rayfield = pcall(function()
-        return loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
+local Rayfield = nil
+local loadSuccess = false
+
+-- Try multiple sources
+local sources = {
+    'https://raw.githubusercontent.com/shlexware/Rayfield/main/source',
+    'https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua',
+    'https://raw.githubusercontent.com/alyssagithub/Scripts/main/Rayfield.lua'
+}
+
+for _, url in ipairs(sources) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
     end)
-    
-    if not success then
-        -- Fallback notification
-        Notify("Error", "Failed to load Rayfield", 5)
-        return nil
+    if success and result then
+        Rayfield = result
+        loadSuccess = true
+        break
     end
-    
-    return Rayfield
 end
 
-local function Initialize()
-    LoadConfig()
-    
-    local Rayfield = LoadRayfield()
-    if not Rayfield then return end
-    
-    local Window = Rayfield:CreateWindow({
-        Name = "Fare well",
-        LoadingTitle = "Fare well",
-        LoadingSubtitle = "Death Note Script",
-        ConfigurationSaving = {
-            Enabled = true,
-            FolderName = "FareWell",
-            FileName = "DeathNote"
-        },
-        Discord = {
-            Enabled = false,
-        },
-        KeySystem = false,
-    })
-    
-    -- Main Tab
-    local MainTab = Window:CreateTab("Main")
-    
-    local DetectionSection = MainTab:CreateSection("Detection")
-    
-    local StatusLabel = MainTab:CreateLabel("Status: Ready")
-    local KiraLabel = MainTab:CreateLabel("Kira: None")
-    local TakaLabel = MainTab:CreateLabel("ID Pickers: None")
-    local LLabel = MainTab:CreateLabel("L: None")
-    
-    MainTab:CreateButton({
-        Name = "Start Detection",
-        Callback = function()
-            if DetectionActive then return end
-            DetectionActive = true
+if not loadSuccess then
+    -- Try one more time with different method
+    pcall(function()
+        Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
+        loadSuccess = true
+    end)
+end
+
+if not Rayfield then
+    Notify("Error", "Failed to load Rayfield. Check your executor.", 5)
+    return
+end
+
+-- ==================== CREATE GUI ====================
+
+local Window = Rayfield:CreateWindow({
+    Name = "Fare well",
+    LoadingTitle = "Fare well",
+    LoadingSubtitle = "by Death Note Script",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "FareWell",
+        FileName = "DeathNoteConfig"
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
+})
+
+-- Main Tab
+local MainTab = Window:CreateTab("Main", "home")
+
+local StatusSection = MainTab:CreateSection("Detection Status")
+
+local StatusLabel = MainTab:CreateLabel("Status: Ready")
+local KiraLabel = MainTab:CreateLabel("Kira: None")
+local TakaLabel = MainTab:CreateLabel("ID Pickers: None")
+local LLabel = MainTab:CreateLabel("L: None")
+
+MainTab:CreateButton({
+    Name = "Start Detection",
+    Callback = function()
+        if DetectionActive then return end
+        DetectionActive = true
+        
+        local map = workspace:FindFirstChild("Map")
+        if map then
+            CheckIDPickups(map)
+            CheckKira()
             
-            local map = workspace:FindFirstChild("Map")
-            if map then
-                CheckIDPickups(map)
-                CheckKira()
-                
-                task.spawn(function()
-                    while DetectionActive do
-                        TryFetchL()
-                        
-                        local kt = "Kira: "
-                        if #KiraList > 0 then
-                            for i, k in pairs(KiraList) do
-                                kt = kt .. (i > 1 and ", " or "") .. k.DisplayName
-                            end
-                        else
-                            kt = kt .. "None"
+            task.spawn(function()
+                while DetectionActive do
+                    TryFetchL()
+                    
+                    local kt = "Kira: "
+                    if #KiraList > 0 then
+                        for i, k in pairs(KiraList) do
+                            kt = kt .. (i > 1 and ", " or "") .. k.DisplayName
                         end
-                        KiraLabel:Set(kt)
-                        
-                        local tt = "ID Pickers: "
-                        if #TakaList > 0 then
-                            for i, t in pairs(TakaList) do
-                                tt = tt .. (i > 1 and ", " or "") .. t.DisplayName
-                            end
-                        else
-                            tt = tt .. "None"
-                        end
-                        TakaLabel:Set(tt)
-                        
-                        local lt = "L: "
-                        if #LList > 0 then
-                            for i, l in pairs(LList) do
-                                lt = lt .. (i > 1 and ", " or "") .. l.DisplayName
-                            end
-                        else
-                            lt = lt .. "None"
-                        end
-                        LLabel:Set(lt)
-                        
-                        task.wait(2)
+                    else
+                        kt = kt .. "None"
                     end
-                end)
-                
-                StatusLabel:Set("Status: Active")
-                Notify("Detection Started", "Tracking Kira, IDs, and L", 3)
-            end
-        end
-    })
-    
-    MainTab:CreateButton({
-        Name = "Clear All Data",
-        Callback = function()
-            ClearDetection()
-            StatusLabel:Set("Status: Ready")
-            KiraLabel:Set("Kira: None")
-            TakaLabel:Set("ID Pickers: None")
-            LLabel:Set("L: None")
-            Notify("Cleared", "All detection data reset", 2)
-        end
-    })
-    
-    -- ESP Tab
-    local ESPTab = Window:CreateTab("ESP")
-    
-    ESPTab:CreateSection("Player ESP")
-    
-    ESPTab:CreateToggle({
-        Name = "All Players",
-        CurrentValue = Config.PlayerESP,
-        Flag = "PlayerESP",
-        Callback = function(Value)
-            Config.PlayerESP = Value
-            SaveConfig()
-        end
-    })
-    
-    ESPTab:CreateToggle({
-        Name = "Kira Highlight",
-        CurrentValue = Config.KiraESP,
-        Flag = "KiraESP",
-        Callback = function(Value)
-            Config.KiraESP = Value
-            SaveConfig()
-        end
-    })
-    
-    ESPTab:CreateSection("Object ESP")
-    
-    ESPTab:CreateToggle({
-        Name = "Death Note",
-        CurrentValue = Config.DeathNoteESP,
-        Flag = "DeathNoteESP",
-        Callback = function(Value)
-            Config.DeathNoteESP = Value
-            SaveConfig()
-        end
-    })
-    
-    ESPTab:CreateToggle({
-        Name = "All IDs",
-        CurrentValue = Config.IDsESP,
-        Flag = "IDsESP",
-        Callback = function(Value)
-            Config.IDsESP = Value
-            SaveConfig()
-        end
-    })
-    
-    ESPTab:CreateToggle({
-        Name = "Your ID Only",
-        CurrentValue = Config.YourIDESP,
-        Flag = "YourIDESP",
-        Callback = function(Value)
-            Config.YourIDESP = Value
-            SaveConfig()
-        end
-    })
-    
-    -- Teleport Tab
-    local TeleportTab = Window:CreateTab("Teleport")
-    
-    TeleportTab:CreateSection("Teleportation")
-    
-    TeleportTab:CreateButton({
-        Name = "Teleport to Your ID",
-        Callback = TeleportToYourID
-    })
-    
-    TeleportTab:CreateInput({
-        Name = "Teleport to Player",
-        PlaceholderText = "Enter player name...",
-        RemoveTextAfterFocusLost = true,
-        Callback = TeleportToPlayer
-    })
-    
-    -- Fishing Tab
-    local FishingTab = Window:CreateTab("Fishing")
-    
-    FishingTab:CreateSection("Auto Features")
-    
-    FishingTab:CreateToggle({
-        Name = "Auto Fish",
-        CurrentValue = Config.AutoFish,
-        Flag = "AutoFish",
-        Callback = function(Value)
-            Config.AutoFish = Value
-            SaveConfig()
-            if Value then
-                StartFishing()
-            else
-                StopFishing()
-                StartFishing() -- Restart to handle state
-            end
-        end
-    })
-    
-    FishingTab:CreateToggle({
-        Name = "Auto Shinigamis",
-        CurrentValue = Config.AutoShinigamis,
-        Flag = "AutoShinigamis",
-        Callback = function(Value)
-            Config.AutoShinigamis = Value
-            SaveConfig()
-            StopFishing()
-            StartFishing()
-        end
-    })
-    
-    FishingTab:CreateToggle({
-        Name = "Auto Titles",
-        CurrentValue = Config.AutoTitles,
-        Flag = "AutoTitles",
-        Callback = function(Value)
-            Config.AutoTitles = Value
-            SaveConfig()
-            StopFishing()
-            StartFishing()
-        end
-    })
-    
-    FishingTab:CreateLabel("Auto Features send remote events automatically")
-    
-    -- Misc Tab
-    local MiscTab = Window:CreateTab("Misc")
-    
-    MiscTab:CreateSection("Utilities")
-    
-    MiscTab:CreateToggle({
-        Name = "Noclip",
-        CurrentValue = Config.Noclip,
-        Flag = "Noclip",
-        Callback = function(Value)
-            Config.Noclip = Value
-            ToggleNoclip(Value)
-            SaveConfig()
-        end
-    })
-    
-    MiscTab:CreateButton({
-        Name = "Auto Search DN",
-        Callback = AutoSearchDN
-    })
-    
-    MiscTab:CreateButton({
-        Name = "Instant Prompts",
-        Callback = function()
-            local map = workspace:FindFirstChild("Map")
-            if map then
-                for _, obj in pairs(map:GetDescendants()) do
-                    if obj:IsA("ProximityPrompt") then
-                        obj.HoldDuration = 0
-                        obj.MaxActivationDistance = 1000
-                        obj.RequiresLineOfSight = false
+                    KiraLabel:Set(kt)
+                    
+                    local tt = "ID Pickers: "
+                    if #TakaList > 0 then
+                        for i, t in pairs(TakaList) do
+                            tt = tt .. (i > 1 and ", " or "") .. t.DisplayName
+                        end
+                    else
+                        tt = tt .. "None"
                     end
+                    TakaLabel:Set(tt)
+                    
+                    local lt = "L: "
+                    if #LList > 0 then
+                        for i, l in pairs(LList) do
+                            lt = lt .. (i > 1 and ", " or "") .. l.DisplayName
+                        end
+                    else
+                        lt = lt .. "None"
+                    end
+                    LLabel:Set(lt)
+                    
+                    task.wait(2)
                 end
-                Notify("Prompts Modified", "Instant pickup enabled", 2)
-            end
+            end)
+            
+            StatusLabel:Set("Status: Active")
+            Notify("Detection Started", "Tracking Kira, IDs, and L", 3)
         end
-    })
-    
-    -- Settings Tab
-    local SettingsTab = Window:CreateTab("Settings")
-    
-    SettingsTab:CreateSection("Configuration")
-    
-    SettingsTab:CreateToggle({
-        Name = "Notifications",
-        CurrentValue = Config.Notifications,
-        Flag = "Notifications",
-        Callback = function(Value)
-            Config.Notifications = Value
-            SaveConfig()
-        end
-    })
-    
-    SettingsTab:CreateKeybind({
-        Name = "UI Toggle Keybind",
-        CurrentKeybind = Config.Keybind,
-        HoldToInteract = false,
-        Flag = "Keybind",
-        Callback = function(Keybind)
-            Config.Keybind = Keybind
-            SaveConfig()
-        end
-    })
-    
-    SettingsTab:CreateButton({
-        Name = "Reset Configuration",
-        Callback = function()
-            Config = {
-                PlayerESP = false,
-                KiraESP = false,
-                DeathNoteESP = false,
-                IDsESP = false,
-                YourIDESP = false,
-                Noclip = false,
-                AutoSearch = false,
-                Notifications = true,
-                AutoFish = false,
-                AutoShinigamis = false,
-                AutoTitles = false,
-                Keybind = Enum.KeyCode.K
-            }
-            SaveConfig()
-            Notify("Config Reset", "Please re-execute script", 3)
-        end
-    })
-    
-    -- ESP Loop
-    RunService.RenderStepped:Connect(UpdateESP)
-    
-    -- Auto-clear on new match
-    if GamePhase then
-        GamePhase:GetPropertyChangedSignal("Value"):Connect(function()
-            local newPhase = GamePhase.Value
-            if newPhase == "Starting" or newPhase == "Intermission" then
-                ClearDetection()
-                Notify("Match Reset", "Detection data cleared", 3)
-            end
-        end)
     end
-    
-    -- Anti-AFK
-    LocalPlayer.Idled:Connect(function()
-        VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-        task.wait(1)
-        VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+})
+
+MainTab:CreateButton({
+    Name = "Clear All Data",
+    Callback = function()
+        ClearDetection()
+        StatusLabel:Set("Status: Ready")
+        KiraLabel:Set("Kira: None")
+        TakaLabel:Set("ID Pickers: None")
+        LLabel:Set("L: None")
+        Notify("Cleared", "All detection data reset", 2)
+    end
+})
+
+-- ESP Tab
+local ESPTab = Window:CreateTab("ESP", "eye")
+
+local PlayerESPSection = ESPTab:CreateSection("Player ESP")
+
+local PlayerESPToggle = ESPTab:CreateToggle({
+    Name = "All Players",
+    CurrentValue = false,
+    Flag = "PlayerESP",
+    Callback = function(Value)
+        UpdateESP(
+            Value,
+            KiraESPToggle.CurrentValue,
+            DeathNoteESPToggle.CurrentValue,
+            IDsESPToggle.CurrentValue,
+            YourIDESPToggle.CurrentValue
+        )
+    end
+})
+
+local KiraESPToggle = ESPTab:CreateToggle({
+    Name = "Kira Highlight",
+    CurrentValue = false,
+    Flag = "KiraESP",
+    Callback = function(Value)
+        UpdateESP(
+            PlayerESPToggle.CurrentValue,
+            Value,
+            DeathNoteESPToggle.CurrentValue,
+            IDsESPToggle.CurrentValue,
+            YourIDESPToggle.CurrentValue
+        )
+    end
+})
+
+local ObjectESPSection = ESPTab:CreateSection("Object ESP")
+
+local DeathNoteESPToggle = ESPTab:CreateToggle({
+    Name = "Death Note",
+    CurrentValue = false,
+    Flag = "DeathNoteESP",
+    Callback = function(Value)
+        UpdateESP(
+            PlayerESPToggle.CurrentValue,
+            KiraESPToggle.CurrentValue,
+            Value,
+            IDsESPToggle.CurrentValue,
+            YourIDESPToggle.CurrentValue
+        )
+    end
+})
+
+local IDsESPToggle = ESPTab:CreateToggle({
+    Name = "All IDs",
+    CurrentValue = false,
+    Flag = "IDsESP",
+    Callback = function(Value)
+        UpdateESP(
+            PlayerESPToggle.CurrentValue,
+            KiraESPToggle.CurrentValue,
+            DeathNoteESPToggle.CurrentValue,
+            Value,
+            YourIDESPToggle.CurrentValue
+        )
+    end
+})
+
+local YourIDESPToggle = ESPTab:CreateToggle({
+    Name = "Your ID Only",
+    CurrentValue = false,
+    Flag = "YourIDESP",
+    Callback = function(Value)
+        UpdateESP(
+            PlayerESPToggle.CurrentValue,
+            KiraESPToggle.CurrentValue,
+            DeathNoteESPToggle.CurrentValue,
+            IDsESPToggle.CurrentValue,
+            Value
+        )
+    end
+})
+
+-- Teleport Tab
+local TeleportTab = Window:CreateTab("Teleport", "locate")
+
+TeleportTab:CreateSection("Teleportation")
+
+TeleportTab:CreateButton({
+    Name = "Teleport to Your ID",
+    Callback = TeleportToYourID
+})
+
+TeleportTab:CreateInput({
+    Name = "Teleport to Player",
+    PlaceholderText = "Enter player name...",
+    RemoveTextAfterFocusLost = true,
+    Callback = TeleportToPlayer
+})
+
+-- Fishing Tab
+local FishingTab = Window:CreateTab("Fishing", "fish")
+
+FishingTab:CreateSection("Auto Features")
+
+FishingTab:CreateToggle({
+    Name = "Auto Fish",
+    CurrentValue = false,
+    Flag = "AutoFish",
+    Callback = function(Value)
+        if Value then
+            StartAutoFish()
+            Notify("Auto Fish", "Started", 2)
+        else
+            if FishingLoops["Fish"] then
+                pcall(function() task.cancel(FishingLoops["Fish"]) end)
+                FishingLoops["Fish"] = nil
+            end
+            Notify("Auto Fish", "Stopped", 2)
+        end
+    end
+})
+
+FishingTab:CreateToggle({
+    Name = "Auto Shinigamis",
+    CurrentValue = false,
+    Flag = "AutoShinigamis",
+    Callback = function(Value)
+        if Value then
+            StartAutoShinigamis()
+            Notify("Auto Shinigamis", "Started", 2)
+        else
+            if FishingLoops["Shinigamis"] then
+                pcall(function() task.cancel(FishingLoops["Shinigamis"]) end)
+                FishingLoops["Shinigamis"] = nil
+            end
+            Notify("Auto Shinigamis", "Stopped", 2)
+        end
+    end
+})
+
+FishingTab:CreateToggle({
+    Name = "Auto Titles",
+    CurrentValue = false,
+    Flag = "AutoTitles",
+    Callback = function(Value)
+        if Value then
+            StartAutoTitles()
+            Notify("Auto Titles", "Started", 2)
+        else
+            if FishingLoops["Titles"] then
+                pcall(function() task.cancel(FishingLoops["Titles"]) end)
+                FishingLoops["Titles"] = nil
+            end
+            Notify("Auto Titles", "Stopped", 2)
+        end
+    end
+})
+
+FishingTab:CreateLabel("Auto features use remote events")
+
+-- Misc Tab
+local MiscTab = Window:CreateTab("Misc", "settings")
+
+MiscTab:CreateSection("Utilities")
+
+local NoclipToggle = MiscTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Flag = "Noclip",
+    Callback = function(Value)
+        ToggleNoclip(Value)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Auto Search DN",
+    Callback = AutoSearchDN
+})
+
+MiscTab:CreateButton({
+    Name = "Instant Prompts",
+    Callback = function()
+        local map = workspace:FindFirstChild("Map")
+        if map then
+            for _, obj in pairs(map:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") then
+                    obj.HoldDuration = 0
+                    obj.MaxActivationDistance = 1000
+                    obj.RequiresLineOfSight = false
+                end
+            end
+            Notify("Prompts Modified", "Instant pickup enabled", 2)
+        end
+    end
+})
+
+-- Settings Tab
+local SettingsTab = Window:CreateTab("Settings", "cog")
+
+SettingsTab:CreateSection("Configuration")
+
+SettingsTab:CreateToggle({
+    Name = "Notifications",
+    CurrentValue = true,
+    Flag = "Notifications",
+    Callback = function(Value)
+        -- Handled internally
+    end
+})
+
+SettingsTab:CreateKeybind({
+    Name = "UI Toggle Keybind",
+    CurrentKeybind = "K",
+    HoldToInteract = false,
+    Flag = "UIKeybind",
+    Callback = function(Keybind)
+        -- Keybind set
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Destroy UI",
+    Callback = function()
+        Rayfield:Destroy()
+    end
+})
+
+-- ESP Update Loop
+RunService.RenderStepped:Connect(function()
+    UpdateESP(
+        PlayerESPToggle.CurrentValue,
+        KiraESPToggle.CurrentValue,
+        DeathNoteESPToggle.CurrentValue,
+        IDsESPToggle.CurrentValue,
+        YourIDESPToggle.CurrentValue
+    )
+end)
+
+-- Auto-clear on new match
+if GamePhase then
+    GamePhase:GetPropertyChangedSignal("Value"):Connect(function()
+        local newPhase = GamePhase.Value
+        if newPhase == "Starting" or newPhase == "Intermission" then
+            ClearDetection()
+            Notify("Match Reset", "Detection data cleared", 3)
+        end
     end)
-    
-    Notify("Fare well", "Script loaded successfully!", 4)
 end
 
--- Start
-Initialize()
+-- Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+Notify("Fare well", "Script loaded successfully!", 4)
